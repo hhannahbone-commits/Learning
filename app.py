@@ -9,6 +9,8 @@ import os
 import re
 import secrets
 import socket
+import threading
+import webbrowser
 from typing import Any
 from urllib.parse import urlparse
 
@@ -48,10 +50,13 @@ CHART_KEYWORDS = (
     "yAxis",
     "values",
     "labels",
+    "option",
+    "options",
+    "config",
 )
 
 DATA_PATTERN = re.compile(
-    r"(?P<key>series|dataset|datasets|xAxis|yAxis|values|labels|data)\s*:\s*(?P<value>[\[{])",
+    r"(?P<key>series|dataset|datasets|xAxis|yAxis|values|labels|data|option|options|config)\s*:\s*(?P<value>[\[{])",
     re.IGNORECASE,
 )
 
@@ -412,7 +417,11 @@ def _write_sheet_data(sheet, source: DataSource) -> None:
 
     if isinstance(parsed, list):
         if parsed and all(isinstance(item, dict) for item in parsed):
-            headers = sorted({key for item in parsed for key in item.keys()})
+            headers: list[str] = []
+            for item in parsed:
+                for key in item.keys():
+                    if key not in headers:
+                        headers.append(key)
             sheet.append(headers)
             for item in parsed:
                 sheet.append([item.get(key, "") for key in headers])
@@ -577,4 +586,8 @@ def export_xlsx() -> Response:
 
 
 if __name__ == "__main__":
+    def open_browser() -> None:
+        webbrowser.open("http://localhost:5000")
+
+    threading.Timer(1.0, open_browser).start()
     app.run(host="0.0.0.0", port=5000, debug=True)

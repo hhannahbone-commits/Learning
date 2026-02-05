@@ -486,14 +486,15 @@
         if (!container) {
           return;
         }
-        const firstData = document.querySelector(".data-card .data-block");
-        if (!firstData) {
+        const dataSources = {{ data_sources_json|tojson }};
+        if (!dataSources || dataSources.length === 0) {
           container.textContent = "暂无可预览数据。";
           return;
         }
+        const raw = dataSources[0].formatted || dataSources[0].value;
         let parsed;
         try {
-          parsed = JSON.parse(firstData.textContent);
+          parsed = JSON.parse(raw);
         } catch (error) {
           container.textContent = "预览仅支持 JSON 数据格式。";
           return;
@@ -505,9 +506,14 @@
             return;
           }
           if (parsed.every((item) => typeof item === "object" && !Array.isArray(item))) {
-            const headers = Array.from(
-              new Set(parsed.flatMap((item) => Object.keys(item)))
-            );
+            const headers = [];
+            parsed.forEach((item) => {
+              Object.keys(item).forEach((key) => {
+                if (!headers.includes(key)) {
+                  headers.push(key);
+                }
+              });
+            });
             const table = document.createElement("table");
             table.className = "preview-table";
             const thead = document.createElement("thead");
