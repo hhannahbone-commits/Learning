@@ -9,6 +9,19 @@ app = Flask(__name__)
 DEFAULT_TIMEOUT = 20
 MAX_RESULTS = 50
 MAX_TEXT_LENGTH = 2000
+SCRIPT_SCAN_LIMIT = 20000
+
+
+CHART_KEYWORDS = (
+    "echarts",
+    "highcharts",
+    "chart.js",
+    "chartjs",
+    "series",
+    "xAxis",
+    "yAxis",
+    "dataset",
+)
 
 
 def normalize_url(raw_url: str) -> str:
@@ -18,42 +31,45 @@ def normalize_url(raw_url: str) -> str:
     return raw_url
 
 
-def scrape_content(url: str, selector: str) -> list[str]:
+def extract_chart_data(html: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    results: list[str] = []
+
+    for script in soup.find_all("script"):
+        content = script.string or ""
+        if not content:
+            continue
+        lowered = content.lower()
+        if any(keyword in lowered for keyword in CHART_KEYWORDS):
+            snippet = " ".join(content.split())
+            results.append(snippet[:SCRIPT_SCAN_LIMIT])
+
+    return results[:MAX_RESULTS]
+
+
+def scrape_content(url: str) -> list[str]:
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
     response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
-    elements = soup.select(selector) if selector else []
-    results: list[str] = []
-    for element in elements[:MAX_RESULTS]:
-        text = " ".join(element.get_text(strip=True).split())
-        if text:
-            results.append(text[:MAX_TEXT_LENGTH])
-    return results
+    return extract_chart_data(response.text)
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     data = {
         "url": "",
-        "selector": "",
         "results": [],
         "error": "",
     }
 
     if request.method == "POST":
         data["url"] = request.form.get("url", "").strip()
-        data["selector"] = request.form.get("selector", "").strip()
-
         if not data["url"]:
             data["error"] = "请输入网址。"
-        elif not data["selector"]:
-            data["error"] = "请输入 CSS 选择器。"
         else:
             try:
                 target_url = normalize_url(data["url"])
-                data["results"] = scrape_content(target_url, data["selector"])
+                data["results"] = scrape_content(target_url)
                 data["url"] = target_url
             except requests.RequestException as exc:
                 data["error"] = f"请求失败：{exc}"

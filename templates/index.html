@@ -74,7 +74,7 @@
   <body>
     <div class="container">
       <h1>网页内容爬取工具</h1>
-      <p>输入网址和 CSS 选择器，抓取匹配元素的文本内容。</p>
+      <p>输入网址，自动尝试抓取页面中可能的图表配置或数据片段。</p>
 
       <form method="post">
         <label for="url">网址</label>
@@ -84,16 +84,6 @@
           type="text"
           placeholder="https://example.com"
           value="{{ url }}"
-          required
-        />
-
-        <label for="selector">CSS 选择器</label>
-        <input
-          id="selector"
-          name="selector"
-          type="text"
-          placeholder=".chart-title, #main h2"
-          value="{{ selector }}"
           required
         />
 
@@ -114,7 +104,8 @@
       {% endif %}
 
       <div class="note">
-        <p>提示：CSS 选择器可用 <code>.class</code>、<code>#id</code>、<code>tag</code> 等形式。</p>
+        <p>提示：当前会在页面脚本中搜索常见图表库关键字（如 ECharts、Highcharts、Chart.js）。</p>
+        <p>若页面数据通过接口返回或需登录，请先定位接口或在有登录态的环境中运行。</p>
         <p>请确保目标网站允许抓取，并遵守其使用条款。</p>
       </div>
     </div>
