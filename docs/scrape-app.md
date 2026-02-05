@@ -25,8 +25,8 @@ http://localhost:5000
 ## 使用提示
 
 - 请输入完整网址（或省略协议时自动补全为 `https://`）。
-- 工具会在页面 `<script>` 中查找常见图表关键字（如 ECharts/Highcharts/Chart.js）。
-- 最多返回 50 条脚本片段，每条最多截取 20,000 字符。
+- 工具会在页面 `<script>` 中查找常见图表关键字（如 ECharts/Highcharts/Chart.js），并进一步解析 `series/data/datasets` 等配置项中的数组数据。
+- 提取到的数据会优先格式化为 JSON 显示，最多返回 30 个数据块，每个数据块截取最多 2,000 字符。
 
 ## 注意事项
 

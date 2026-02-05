@@ -59,6 +59,22 @@
         padding: 0.8rem;
         border-bottom: 1px dashed #d0d7de;
       }
+      pre {
+        background: #f6f8fa;
+        padding: 0.8rem;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+      .copy-button {
+        margin-top: 0.6rem;
+        background: #0969da;
+        font-size: 0.9rem;
+      }
+      details summary {
+        cursor: pointer;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+      }
       .note {
         margin-top: 1rem;
         color: #57606a;
@@ -94,13 +110,34 @@
       <div class="error">{{ error }}</div>
       {% endif %}
 
-      {% if results %}
       <div class="results">
-        <h2>结果（{{ results|length }} 条）</h2>
-        {% for item in results %}
-        <div class="result-item">{{ item }}</div>
+        <h2>提取的数据</h2>
+        {% if data_sources %}
+        {% for source in data_sources %}
+        <div class="result-item">
+          <div><strong>{{ source.label }}</strong></div>
+          {% if source.formatted %}
+          <pre><code class="data-block">{{ source.formatted }}</code></pre>
+          {% else %}
+          <pre><code class="data-block">{{ source.value }}</code></pre>
+          {% endif %}
+          <button class="copy-button" type="button">复制数据</button>
+        </div>
         {% endfor %}
+        {% elif searched %}
+        <div class="result-item">未找到可识别的图表数据。</div>
+        {% endif %}
       </div>
+
+      {% if raw_snippets %}
+      <details class="results">
+        <summary>原始代码片段（{{ raw_snippets|length }} 条）</summary>
+        {% for item in raw_snippets %}
+        <div class="result-item">
+          <pre><code>{{ item }}</code></pre>
+        </div>
+        {% endfor %}
+      </details>
       {% endif %}
 
       <div class="note">
@@ -109,5 +146,21 @@
         <p>请确保目标网站允许抓取，并遵守其使用条款。</p>
       </div>
     </div>
+    <script>
+      document.querySelectorAll(".copy-button").forEach((button) => {
+        button.addEventListener("click", () => {
+          const code = button.parentElement.querySelector(".data-block");
+          if (!code) {
+            return;
+          }
+          navigator.clipboard.writeText(code.textContent || "").then(() => {
+            button.textContent = "已复制";
+            setTimeout(() => {
+              button.textContent = "复制数据";
+            }, 1200);
+          });
+        });
+      });
+    </script>
   </body>
 </html>
