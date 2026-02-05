@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>图表数据智能爬取工具</title>
+    <style>
+      :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --success-color: #10b981;
+        --error-color: #ef4444;
+        --warning-color: #f59e0b;
+        --bg-light: #f8fafc;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --border-color: #e2e8f0;
+        --card-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color: var(--text-primary);
+        background: var(--primary-gradient);
+        min-height: 100vh;
+      }
+
+      .page {
+        padding: 3rem 1.5rem 4rem;
+      }
+
+      .card {
+        max-width: 1100px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        padding: 2.5rem;
+        box-shadow: var(--card-shadow);
+      }
+
+      .header {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .header h1 {
+        margin: 0;
+        font-size: 2rem;
+      }
+
+      .header p {
+        margin: 0;
+        color: var(--text-secondary);
+      }
+
+      .input-group {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.4rem;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 2px solid var(--border-color);
+        border-radius: 12px;
+        padding: 0.8rem 1rem;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+      }
+
+      .input-group input[type="checkbox"] {
+        width: auto;
+        margin-right: 0.5rem;
+      }
+
+      input:focus,
+      textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+        transform: translateY(-1px);
+      }
+
+      .url-status {
+        font-size: 0.85rem;
+        margin-top: 0.3rem;
+        color: var(--text-secondary);
+      }
+
+      .url-status.valid {
+        color: var(--success-color);
+      }
+
+      .url-status.invalid {
+        color: var(--error-color);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 1.2rem;
+      }
+
+      .btn-primary,
+      .btn-secondary {
+        border: none;
+        padding: 0.85rem 2rem;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .btn-primary {
+        background: var(--primary-gradient);
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.45);
+      }
+
+      .btn-secondary {
+        background: #f1f5f9;
+        color: var(--text-primary);
+      }
+
+      .btn-secondary:hover {
+        transform: translateY(-2px);
+      }
+
+      details {
+        margin-top: 1rem;
+        background: var(--bg-light);
+        border-radius: 12px;
+        padding: 1rem;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .grid {
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        margin-top: 2rem;
+      }
+
+      .data-card {
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 1.5rem;
+        background: white;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        animation: fadeInUp 0.4s ease;
+      }
+
+      .data-card h3 {
+        margin-top: 0;
+      }
+
+      .meta {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+      }
+
+      pre {
+        background: #f8fafc;
+        padding: 1rem;
+        border-radius: 12px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .copy-button {
+        margin-top: 0.6rem;
+        background: #0f172a;
+        color: white;
+        border: none;
+        padding: 0.4rem 0.9rem;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        align-items: center;
+        margin-top: 1.5rem;
+      }
+
+      .error {
+        background: #fee2e2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        padding: 1rem;
+        border-radius: 12px;
+        margin-top: 1.5rem;
+      }
+
+      .note {
+        margin-top: 2rem;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+      }
+
+      #preview-section {
+        background: var(--bg-light);
+        border-radius: 16px;
+        padding: 1.5rem;
+      }
+
+      #preview-section h2 {
+        margin-top: 0;
+      }
+
+      .preview-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        margin-top: 1rem;
+      }
+
+      .preview-table th,
+      .preview-table td {
+        border: 1px solid var(--border-color);
+        padding: 0.6rem;
+        text-align: left;
+        font-size: 0.9rem;
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 768px) {
+        .card {
+          padding: 1.5rem;
+        }
+
+        .actions {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="card">
+        <div class="header">
+          <h1>图表数据智能爬取工具</h1>
+          <p>输入网址即可自动提取图表数据，并支持认证、Headers 与导出功能。</p>
+        </div>
+
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <div class="input-group">
+            <label for="url">目标网址</label>
+            <input
+              id="url"
+              name="url"
+              type="text"
+              placeholder="https://example.com/charts"
+              value="{{ url }}"
+              required
+            />
+            <div class="url-status" id="url-status">请输入有效网址</div>
+          </div>
+
+          <details>
+            <summary>高级设置</summary>
+            <div class="input-group">
+              <label for="cookies">Cookie（可选）</label>
+              <textarea
+                id="cookies"
+                name="cookies"
+                rows="2"
+                placeholder="name=value; token=..."
+              >{{ cookies }}</textarea>
+            </div>
+            <div class="input-group">
+              <label for="headers">自定义 Headers（JSON，可选）</label>
+              <textarea
+                id="headers"
+                name="headers"
+                rows="3"
+                placeholder='{"Authorization": "Bearer ..."}'
+              >{{ headers }}</textarea>
+            </div>
+            <div class="input-group">
+              <label for="proxy">代理（可选）</label>
+              <input
+                id="proxy"
+                name="proxy"
+                type="text"
+                placeholder="http://127.0.0.1:7890"
+                value="{{ proxy }}"
+              />
+            </div>
+            <div class="input-group">
+              <label for="timeout">超时时间（秒）</label>
+              <input id="timeout" name="timeout" type="number" value="{{ timeout }}" />
+            </div>
+            <div class="input-group">
+              <label for="custom_regex">自定义正则（可选）</label>
+              <input
+                id="custom_regex"
+                name="custom_regex"
+                type="text"
+                placeholder="data\s*:\s*\[[^\]]+\]"
+                value="{{ custom_regex }}"
+              />
+            </div>
+            <div class="input-group">
+              <label>
+                <input
+                  type="checkbox"
+                  name="use_dynamic"
+                  value="1"
+                  {% if use_dynamic %}checked{% endif %}
+                />
+                一键动态爬取（需要 Playwright）
+              </label>
+            </div>
+          </details>
+
+          <div class="actions">
+            <button class="btn-primary" type="submit">开始爬取</button>
+            <button class="btn-secondary" type="reset">清空</button>
+          </div>
+        </form>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <div class="toolbar">
+          <input
+            id="filter"
+            type="text"
+            placeholder="筛选提取数据（输入关键字）"
+            aria-label="筛选提取数据"
+          />
+          {% if data_sources %}
+          <form method="post" action="/export/json">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="data_sources_json" value='{{ data_sources_json }}' />
+            <button class="btn-secondary" type="submit">导出 JSON</button>
+          </form>
+          <form method="post" action="/export/csv">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="data_sources_json" value='{{ data_sources_json }}' />
+            <button class="btn-secondary" type="submit">导出 CSV</button>
+          </form>
+          <form method="post" action="/export/xlsx">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="data_sources_json" value='{{ data_sources_json }}' />
+            <button class="btn-secondary" type="submit">导出 Excel</button>
+          </form>
+          {% endif %}
+        </div>
+
+        <section class="note" id="preview-section">
+          <h2>数据预览</h2>
+          <div id="preview-container">暂无可预览数据。</div>
+        </section>
+
+        <section class="grid" id="data-grid">
+          {% if data_sources %}
+          {% for source in data_sources %}
+          <div class="data-card" data-label="{{ source.label }} {{ source.source }}">
+            <h3>{{ source.label }}</h3>
+            <div class="meta">来源：{{ source.source }}</div>
+            {% if source.formatted %}
+            <pre><code class="data-block">{{ source.formatted }}</code></pre>
+            {% else %}
+            <pre><code class="data-block">{{ source.value }}</code></pre>
+            {% endif %}
+            <button class="copy-button" type="button">复制数据</button>
+          </div>
+          {% endfor %}
+          {% elif searched %}
+          <div class="data-card">未找到可识别的图表数据。</div>
+          {% endif %}
+        </section>
+
+        {% if raw_snippets %}
+        <details class="note">
+          <summary>原始代码片段（{{ raw_snippets|length }} 条）</summary>
+          {% for item in raw_snippets %}
+          <div class="data-card">
+            <pre><code>{{ item }}</code></pre>
+          </div>
+          {% endfor %}
+        </details>
+        {% endif %}
+
+        <div class="note">
+          <p>支持识别 ECharts、Highcharts、Chart.js、D3、Plotly、ApexCharts 等常见图表库。</p>
+          <p>如果页面是 SPA 或需要登录，请先准备好 Cookie 或 Headers。</p>
+          <p>请确保目标网站允许抓取，并遵守其使用条款。</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const urlInput = document.getElementById("url");
+      const statusEl = document.getElementById("url-status");
+      const filterInput = document.getElementById("filter");
+
+      function updateStatus() {
+        const value = urlInput.value.trim();
+        if (!value) {
+          statusEl.textContent = "请输入有效网址";
+          statusEl.className = "url-status";
+          return;
+        }
+        try {
+          const url = new URL(value.includes("://") ? value : `https://${value}`);
+          statusEl.textContent = `已识别：${url.origin}`;
+          statusEl.className = "url-status valid";
+        } catch (error) {
+          statusEl.textContent = "网址格式不正确";
+          statusEl.className = "url-status invalid";
+        }
+      }
+
+      urlInput.addEventListener("input", updateStatus);
+      updateStatus();
+
+      document.querySelectorAll(".copy-button").forEach((button) => {
+        button.addEventListener("click", () => {
+          const code = button.parentElement.querySelector(".data-block");
+          if (!code) {
+            return;
+          }
+          navigator.clipboard.writeText(code.textContent || "").then(() => {
+            button.textContent = "已复制";
+            button.style.background = "#16a34a";
+            setTimeout(() => {
+              button.textContent = "复制数据";
+              button.style.background = "#0f172a";
+            }, 1200);
+          });
+        });
+      });
+
+      filterInput?.addEventListener("input", () => {
+        const keyword = filterInput.value.trim().toLowerCase();
+        document.querySelectorAll(".data-card").forEach((card) => {
+          const label = card.getAttribute("data-label") || "";
+          if (!keyword || label.toLowerCase().includes(keyword)) {
+            card.style.display = "block";
+          } else {
+            card.style.display = "none";
+          }
+        });
+      });
+
+      function renderPreview() {
+        const container = document.getElementById("preview-container");
+        if (!container) {
+          return;
+        }
+        const firstData = document.querySelector(".data-card .data-block");
+        if (!firstData) {
+          container.textContent = "暂无可预览数据。";
+          return;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(firstData.textContent);
+        } catch (error) {
+          container.textContent = "预览仅支持 JSON 数据格式。";
+          return;
+        }
+
+        if (Array.isArray(parsed)) {
+          if (parsed.length === 0) {
+            container.textContent = "预览数据为空。";
+            return;
+          }
+          if (parsed.every((item) => typeof item === "object" && !Array.isArray(item))) {
+            const headers = Array.from(
+              new Set(parsed.flatMap((item) => Object.keys(item)))
+            );
+            const table = document.createElement("table");
+            table.className = "preview-table";
+            const thead = document.createElement("thead");
+            const headerRow = document.createElement("tr");
+            headers.forEach((header) => {
+              const th = document.createElement("th");
+              th.textContent = header;
+              headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            const tbody = document.createElement("tbody");
+            parsed.forEach((item) => {
+              const row = document.createElement("tr");
+              headers.forEach((header) => {
+                const td = document.createElement("td");
+                const value = item[header];
+                td.textContent =
+                  value === undefined ? "" : JSON.stringify(value);
+                row.appendChild(td);
+              });
+              tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            container.innerHTML = "";
+            container.appendChild(table);
+            return;
+          }
+
+          if (parsed.every((item) => Array.isArray(item))) {
+            const table = document.createElement("table");
+            table.className = "preview-table";
+            const tbody = document.createElement("tbody");
+            parsed.forEach((rowData) => {
+              const row = document.createElement("tr");
+              rowData.forEach((cell) => {
+                const td = document.createElement("td");
+                td.textContent = JSON.stringify(cell);
+                row.appendChild(td);
+              });
+              tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            container.innerHTML = "";
+            container.appendChild(table);
+            return;
+          }
+        }
+
+        if (typeof parsed === "object" && parsed !== null) {
+          const table = document.createElement("table");
+          table.className = "preview-table";
+          const tbody = document.createElement("tbody");
+          Object.entries(parsed).forEach(([key, value]) => {
+            const row = document.createElement("tr");
+            const keyCell = document.createElement("td");
+            keyCell.textContent = key;
+            const valueCell = document.createElement("td");
+            valueCell.textContent = JSON.stringify(value);
+            row.appendChild(keyCell);
+            row.appendChild(valueCell);
+            tbody.appendChild(row);
+          });
+          table.appendChild(tbody);
+          container.innerHTML = "";
+          container.appendChild(table);
+          return;
+        }
+
+        container.textContent = "预览仅支持数组或对象类型的数据。";
+      }
+
+      renderPreview();
+    </script>
+  </body>
+</html>
