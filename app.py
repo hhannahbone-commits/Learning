@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 import csv
+import importlib.util
 import io
 import json
 import logging
@@ -9,6 +10,8 @@ import os
 import re
 import secrets
 import socket
+import subprocess
+import sys
 import threading
 import webbrowser
 from typing import Any
@@ -33,6 +36,30 @@ MAX_RESULTS = 80
 MAX_TEXT_LENGTH = 4000
 SCRIPT_SCAN_LIMIT = 30000
 MAX_DATA_SOURCES = 60
+
+AUTO_INSTALL = os.getenv("AUTO_INSTALL_DEPS", "1") == "1"
+REQUIRED_MODULES = ("flask", "requests", "bs4", "openpyxl", "playwright")
+
+
+def _missing_modules() -> list[str]:
+    missing = []
+    for module_name in REQUIRED_MODULES:
+        if importlib.util.find_spec(module_name) is None:
+            missing.append(module_name)
+    return missing
+
+
+def _auto_install_requirements() -> None:
+    if not AUTO_INSTALL:
+        return
+    missing = _missing_modules()
+    if not missing:
+        return
+    logger.info("Detected missing modules: %s. Installing requirements...", ", ".join(missing))
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+        check=False,
+    )
 
 CHART_KEYWORDS = (
     "echarts",
@@ -586,6 +613,7 @@ def export_xlsx() -> Response:
 
 
 if __name__ == "__main__":
+    _auto_install_requirements()
     def open_browser() -> None:
         webbrowser.open("http://localhost:5000")
 
