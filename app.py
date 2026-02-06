@@ -411,6 +411,7 @@ def _scrape_dynamic_content(
     cookies: dict[str, str],
     timeout: int,
     custom_regex: str | None,
+    interactive: bool,
 ) -> tuple[list[DataSource], list[str]]:
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
@@ -418,7 +419,7 @@ def _scrape_dynamic_content(
         raise RuntimeError("未检测到 Playwright，请先安装并执行 playwright install。") from exc
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=not interactive)
         context = browser.new_context()
         if headers:
             context.set_extra_http_headers(headers)
@@ -454,6 +455,8 @@ def _scrape_dynamic_content(
 
         page.on("response", handle_response)
         page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+        if interactive:
+            page.wait_for_timeout(30000)
         wait_selectors = [
             "#main",
             ".echarts-container",
@@ -833,6 +836,7 @@ def _prepare_form_data() -> dict[str, Any]:
         "timeout": str(DEFAULT_TIMEOUT),
         "custom_regex": "",
         "use_dynamic": "",
+        "use_interactive": "",
         "data_sources": [],
         "raw_snippets": [],
         "data_sources_json": "",
@@ -875,6 +879,7 @@ def index():
                     cookies=cookies,
                     timeout=timeout,
                     custom_regex=custom_regex,
+                    interactive=bool(data.get("use_interactive")),
                 )
             else:
                 data_sources, raw_snippets = scrape_content(
