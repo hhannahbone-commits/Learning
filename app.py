@@ -432,12 +432,30 @@ def _scrape_dynamic_content(
         page = context.new_page()
         api_sources: list[DataSource] = []
 
-        def _contains_array(payload: object) -> bool:
-            if isinstance(payload, list):
-                return True if payload else False
-            if isinstance(payload, dict):
-                return any(isinstance(value, list) for value in payload.values())
-            return False
+        def _contains_large_numeric_arrays(payload: object) -> bool:
+            try:
+                if isinstance(payload, list):
+                    return any(
+                        isinstance(item, list)
+                        and len(item) >= 5
+                        and all(isinstance(v, (int, float)) for v in item if v is not None)
+                        for item in payload
+                    )
+                if isinstance(payload, dict):
+                    for value in payload.values():
+                        if isinstance(value, list) and len(value) >= 5:
+                            if all(isinstance(v, (int, float)) for v in value if v is not None):
+                                return True
+                            if any(
+                                isinstance(item, list)
+                                and len(item) >= 5
+                                and all(isinstance(v, (int, float)) for v in item if v is not None)
+                                for item in value
+                            ):
+                                return True
+                return False
+            except Exception:
+                return False
 
         def handle_response(response) -> None:
             try:
@@ -445,12 +463,12 @@ def _scrape_dynamic_content(
                 if "application/json" not in content_type:
                     return
                 payload = response.json()
-                if not _contains_array(payload):
+                if not _contains_large_numeric_arrays(payload):
                     return
                 formatted = json.dumps(payload, ensure_ascii=False, indent=2)
                 api_sources.append(
                     DataSource(
-                        label=f"API JSON 数据: {response.url}",
+                        label=f"API 数组数据: {response.url}",
                         value=formatted[:MAX_TEXT_LENGTH],
                         formatted=formatted,
                         source=f"api_json:{response.url}",
@@ -464,48 +482,12 @@ def _scrape_dynamic_content(
         page.wait_for_load_state("networkidle", timeout=timeout * 1000)
         if interactive:
             page.wait_for_timeout(30000)
-        wait_selectors = [
-            "#main",
-            ".echarts-container",
-            "[_echarts_instance_]",
-            ".highcharts-container",
-            "canvas",
-            "svg",
-            ".plotly",
-            ".chart",
-        ]
-        for selector in wait_selectors:
-            try:
-                page.wait_for_selector(selector, timeout=5000)
-                logger.info("Found chart container: %s", selector)
-                break
-            except Exception:
-                continue
-        page.wait_for_timeout(2000)
+            page.wait_for_load_state("networkidle", timeout=timeout * 1000)
 
         chart_configs = page.evaluate(
             """
             () => {
               const results = [];
-              if (!window.__canvasLog) {
-                window.__canvasLog = [];
-              }
-              try {
-                const ctxProto = CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
-                if (ctxProto && !ctxProto.__patchedForLog) {
-                  ["fillRect","strokeRect","fillText","strokeText","moveTo","lineTo","arc","rect","beginPath","closePath","stroke","fill"].forEach((name) => {
-                    const original = ctxProto[name];
-                    if (!original) return;
-                    ctxProto[name] = function(...args) {
-                      try {
-                        window.__canvasLog.push({ method: name, args });
-                      } catch (e) {}
-                      return original.apply(this, args);
-                    };
-                  });
-                  ctxProto.__patchedForLog = true;
-                }
-              } catch (e) {}
               if (typeof echarts !== "undefined") {
                 const instances = [];
                 document.querySelectorAll("*").forEach((el) => {
@@ -535,81 +517,6 @@ def _scrape_dynamic_content(
                       });
                     }
                   } catch (e) {}
-                });
-              }
-              if (typeof Highcharts !== "undefined" && Highcharts.charts) {
-                Highcharts.charts.forEach((chart, index) => {
-                  if (chart) {
-                    results.push({
-                      type: "highcharts_instance",
-                      label: `Highcharts 图表 #${index + 1}`,
-                      data: chart.options
-                    });
-                  }
-                });
-              }
-              if (typeof Chart !== "undefined" && Chart.instances) {
-                Object.values(Chart.instances).forEach((chart, index) => {
-                  if (chart && chart.config) {
-                    results.push({
-                      type: "chartjs_instance",
-                      label: `Chart.js 图表 #${index + 1}`,
-                      data: {
-                        type: chart.config.type,
-                        data: chart.config.data,
-                        options: chart.config.options
-                      }
-                    });
-                  }
-                });
-              }
-              if (typeof Plotly !== "undefined") {
-                document.querySelectorAll(".plotly").forEach((div, index) => {
-                  if (div.data && div.layout) {
-                    results.push({
-                      type: "plotly_instance",
-                      label: `Plotly 图表 #${index + 1}`,
-                      data: { data: div.data, layout: div.layout }
-                    });
-                  }
-                });
-              }
-              const varNames = [
-                "option","chartOption","myOption","options","config","chartConfig",
-                "data","chartData","series","dataset","datasets"
-              ];
-              varNames.forEach((varName) => {
-                try {
-                  if (window[varName] && typeof window[varName] === "object") {
-                    results.push({
-                      type: "global_variable",
-                      label: `全局变量: ${varName}`,
-                      data: window[varName]
-                    });
-                  }
-                } catch (e) {}
-              });
-              const d3Elements = document.querySelectorAll("[__data__]");
-              if (d3Elements.length > 0) {
-                const d3Data = [];
-                d3Elements.forEach((el) => {
-                  if (el.__data__) {
-                    d3Data.push(el.__data__);
-                  }
-                });
-                if (d3Data.length) {
-                  results.push({
-                    type: "d3_data",
-                    label: "D3.js 绑定数据",
-                    data: d3Data
-                  });
-                }
-              }
-              if (window.__canvasLog && window.__canvasLog.length) {
-                results.push({
-                  type: "canvas_log",
-                  label: "Canvas 绘制调用",
-                  data: window.__canvasLog.slice(0, 300)
                 });
               }
               return results;
