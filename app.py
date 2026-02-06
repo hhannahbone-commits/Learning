@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from openpyxl import Workbook
+from docx import Document
 import requests
 from flask import Flask, Response, render_template, request, session
 from requests.adapters import HTTPAdapter
@@ -38,7 +39,7 @@ SCRIPT_SCAN_LIMIT = 30000
 MAX_DATA_SOURCES = 60
 
 AUTO_INSTALL = os.getenv("AUTO_INSTALL_DEPS", "1") == "1"
-REQUIRED_MODULES = ("flask", "requests", "bs4", "openpyxl", "playwright")
+REQUIRED_MODULES = ("flask", "requests", "bs4", "openpyxl", "playwright", "docx")
 
 
 def _missing_modules() -> list[str]:
@@ -486,6 +487,69 @@ def _build_excel(data_sources: list[DataSource]) -> bytes:
     return output.getvalue()
 
 
+def _write_docx_table(document: Document, source: DataSource) -> None:
+    document.add_paragraph(f"数据源：{source.label}")
+    document.add_paragraph(f"来源：{source.source}")
+    raw = source.formatted or source.value
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        document.add_paragraph(raw)
+        document.add_page_break()
+        return
+
+    if isinstance(parsed, list) and parsed:
+        if all(isinstance(item, dict) for item in parsed):
+            headers: list[str] = []
+            for item in parsed:
+                for key in item.keys():
+                    if key not in headers:
+                        headers.append(key)
+            table = document.add_table(rows=1, cols=len(headers))
+            for idx, header in enumerate(headers):
+                table.rows[0].cells[idx].text = str(header)
+            for item in parsed:
+                row_cells = table.add_row().cells
+                for idx, header in enumerate(headers):
+                    row_cells[idx].text = str(item.get(header, ""))
+            document.add_page_break()
+            return
+
+        if all(isinstance(item, list) for item in parsed):
+            max_len = max((len(row) for row in parsed), default=0)
+            table = document.add_table(rows=0, cols=max_len or 1)
+            for row in parsed:
+                row_cells = table.add_row().cells
+                padded = list(row) + [""] * (max_len - len(row))
+                for idx, value in enumerate(padded):
+                    row_cells[idx].text = str(value)
+            document.add_page_break()
+            return
+
+    if isinstance(parsed, dict):
+        table = document.add_table(rows=1, cols=2)
+        table.rows[0].cells[0].text = "key"
+        table.rows[0].cells[1].text = "value"
+        for key, value in parsed.items():
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(key)
+            row_cells[1].text = json.dumps(value, ensure_ascii=False)
+        document.add_page_break()
+        return
+
+    document.add_paragraph(json.dumps(parsed, ensure_ascii=False))
+    document.add_page_break()
+
+
+def _build_docx(data_sources: list[DataSource]) -> bytes:
+    document = Document()
+    for source in data_sources:
+        _write_docx_table(document, source)
+    output = io.BytesIO()
+    document.save(output)
+    return output.getvalue()
+
+
 def _prepare_form_data() -> dict[str, Any]:
     csrf_token = session.get("csrf_token")
     if not csrf_token:
@@ -612,6 +676,22 @@ def export_xlsx() -> Response:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
         headers={"Content-Disposition": "attachment; filename=chart-data.xlsx"},
+    )
+
+
+@app.route("/export/docx", methods=["POST"])
+def export_docx() -> Response:
+    if request.form.get("csrf_token") != session.get("csrf_token"):
+        return Response("Invalid CSRF token.", status=400)
+    raw = request.form.get("data_sources_json", "")
+    sources = _deserialize_sources(raw)
+    payload = _build_docx(sources)
+    return Response(
+        payload,
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={"Content-Disposition": "attachment; filename=chart-data.docx"},
     )
 
 

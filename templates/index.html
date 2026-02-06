@@ -385,6 +385,11 @@
             <input type="hidden" name="data_sources_json" value='{{ data_sources_json }}' />
             <button class="btn-secondary" type="submit">导出 Excel</button>
           </form>
+          <form method="post" action="/export/docx">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="data_sources_json" value='{{ data_sources_json }}' />
+            <button class="btn-secondary" type="submit">导出 Word</button>
+          </form>
           {% endif %}
         </div>
 
