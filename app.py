@@ -316,12 +316,40 @@ def _extract_tables(soup: BeautifulSoup) -> list[DataSource]:
     return results
 
 
+def _extract_svg_data(soup: BeautifulSoup) -> list[DataSource]:
+    results: list[DataSource] = []
+    svg_elements = soup.find_all("svg")
+    for index, svg in enumerate(svg_elements, start=1):
+        entries = []
+        for node in svg.find_all(["path", "rect", "circle", "text"]):
+            entry = {"tag": node.name}
+            for attr in ("d", "x", "y", "cx", "cy", "r", "width", "height", "transform"):
+                if node.has_attr(attr):
+                    entry[attr] = node.get(attr)
+            if node.name == "text":
+                entry["text"] = node.get_text(strip=True)
+            if entry:
+                entries.append(entry)
+        if entries:
+            formatted = json.dumps(entries, ensure_ascii=False, indent=2)
+            results.append(
+                DataSource(
+                    label=f"SVG 图表元素 #{index}",
+                    value=formatted[:MAX_TEXT_LENGTH],
+                    formatted=formatted,
+                    source="svg",
+                )
+            )
+    return results
+
+
 def extract_chart_data(
     html: str, custom_regex: str | None
 ) -> tuple[list[DataSource], list[str]]:
     soup = BeautifulSoup(html, "html.parser")
     data_sources, raw_snippets = _extract_from_scripts(soup, custom_regex)
     data_sources.extend(_extract_tables(soup))
+    data_sources.extend(_extract_svg_data(soup))
     return data_sources[:MAX_DATA_SOURCES], raw_snippets
 
 
@@ -448,6 +476,25 @@ def _scrape_dynamic_content(
             """
             () => {
               const results = [];
+              if (!window.__canvasLog) {
+                window.__canvasLog = [];
+              }
+              try {
+                const ctxProto = CanvasRenderingContext2D && CanvasRenderingContext2D.prototype;
+                if (ctxProto && !ctxProto.__patchedForLog) {
+                  ["fillRect","strokeRect","fillText","strokeText","moveTo","lineTo","arc","rect","beginPath","closePath","stroke","fill"].forEach((name) => {
+                    const original = ctxProto[name];
+                    if (!original) return;
+                    ctxProto[name] = function(...args) {
+                      try {
+                        window.__canvasLog.push({ method: name, args });
+                      } catch (e) {}
+                      return original.apply(this, args);
+                    };
+                  });
+                  ctxProto.__patchedForLog = true;
+                }
+              } catch (e) {}
               if (typeof echarts !== "undefined") {
                 document.querySelectorAll("*").forEach((el) => {
                   try {
@@ -529,6 +576,13 @@ def _scrape_dynamic_content(
                     data: d3Data
                   });
                 }
+              }
+              if (window.__canvasLog && window.__canvasLog.length) {
+                results.push({
+                  type: "canvas_log",
+                  label: "Canvas 绘制调用",
+                  data: window.__canvasLog.slice(0, 300)
+                });
               }
               return results;
             }
