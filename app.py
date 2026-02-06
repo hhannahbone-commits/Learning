@@ -432,58 +432,28 @@ def _scrape_dynamic_content(
         page = context.new_page()
         api_sources: list[DataSource] = []
 
-        def _looks_like_chart_data(payload: object) -> bool:
-            try:
-                if isinstance(payload, list):
-                    return any(
-                        isinstance(item, list)
-                        and len(item) >= 5
-                        and all(isinstance(v, (int, float)) for v in item if v is not None)
-                        for item in payload
-                    )
-                if isinstance(payload, dict):
-                    for value in payload.values():
-                        if isinstance(value, list) and len(value) >= 5:
-                            if all(isinstance(v, (int, float)) for v in value if v is not None):
-                                return True
-                            if any(
-                                isinstance(item, list)
-                                and len(item) >= 5
-                                and all(isinstance(v, (int, float)) for v in item if v is not None)
-                                for item in value
-                            ):
-                                return True
-                return False
-            except Exception:
-                return False
+        def _contains_array(payload: object) -> bool:
+            if isinstance(payload, list):
+                return True if payload else False
+            if isinstance(payload, dict):
+                return any(isinstance(value, list) for value in payload.values())
+            return False
 
         def handle_response(response) -> None:
             try:
                 content_type = response.headers.get("content-type", "")
                 if "application/json" not in content_type:
                     return
-                url_lower = response.url.lower()
                 payload = response.json()
+                if not _contains_array(payload):
+                    return
                 formatted = json.dumps(payload, ensure_ascii=False, indent=2)
-                if _looks_like_chart_data(payload):
-                    api_sources.insert(
-                        0,
-                        DataSource(
-                            label=f"API 图表数据: {response.url}",
-                            value=formatted[:MAX_TEXT_LENGTH],
-                            formatted=formatted,
-                            source=f"api_chart:{response.url}",
-                        ),
-                    )
-                    return
-                if not any(keyword in url_lower for keyword in ("chart", "data", "stat", "graph", "series")):
-                    return
                 api_sources.append(
                     DataSource(
-                        label=f"API 响应数据: {response.url}",
+                        label=f"API JSON 数据: {response.url}",
                         value=formatted[:MAX_TEXT_LENGTH],
                         formatted=formatted,
-                        source=f"api_response:{response.url}",
+                        source=f"api_json:{response.url}",
                     )
                 )
             except Exception:
@@ -667,7 +637,8 @@ def _scrape_dynamic_content(
                 source=f"javascript_{config.get('type', 'runtime')}",
             )
         )
-    data_sources.extend(api_sources)
+    if api_sources:
+        data_sources = api_sources + data_sources
     return data_sources, raw_snippets
 
 
