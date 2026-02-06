@@ -19,6 +19,8 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from docx import Document
 import requests
@@ -623,11 +625,42 @@ def _build_excel(data_sources: list[DataSource]) -> bytes:
         title = _normalize_sheet_title(source.label, f"data_{idx}")
         sheet = workbook.create_sheet(title=title)
         _write_sheet_data(sheet, source)
+        _style_sheet(sheet)
         _add_chart_to_sheet(sheet, source)
 
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue()
+
+
+def _style_sheet(sheet) -> None:
+    header_fill = PatternFill("solid", fgColor="D9D9D9")
+    header_font = Font(bold=True)
+
+    if sheet.max_row >= 4:
+        for cell in sheet[4]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+    for column_cells in sheet.columns:
+        max_length = 0
+        column = column_cells[0].column
+        is_numeric = True
+        for cell in column_cells:
+            value = cell.value
+            if value is None:
+                continue
+            if not isinstance(value, (int, float)):
+                is_numeric = False
+            value_length = len(str(value))
+            if value_length > max_length:
+                max_length = value_length
+        letter = get_column_letter(column)
+        sheet.column_dimensions[letter].width = min(max_length + 2, 50)
+        if is_numeric:
+            for cell in column_cells:
+                if isinstance(cell.value, (int, float)):
+                    cell.number_format = "#,##0.00" if isinstance(cell.value, float) else "#,##0"
 
 
 def _detect_chart_type(source: DataSource, parsed: object) -> str:
