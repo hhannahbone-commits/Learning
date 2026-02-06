@@ -23,6 +23,9 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Pt
 import requests
 from flask import Flask, Response, render_template, request, session
 from requests.adapters import HTTPAdapter
@@ -768,6 +771,7 @@ def _write_docx_table(document: Document, source: DataSource) -> None:
                     if key not in headers:
                         headers.append(key)
             table = document.add_table(rows=1, cols=len(headers))
+            _style_docx_table(table, headers)
             for idx, header in enumerate(headers):
                 table.rows[0].cells[idx].text = str(header)
             for item in parsed:
@@ -779,7 +783,11 @@ def _write_docx_table(document: Document, source: DataSource) -> None:
 
         if all(isinstance(item, list) for item in parsed):
             max_len = max((len(row) for row in parsed), default=0)
-            table = document.add_table(rows=0, cols=max_len or 1)
+            table = document.add_table(rows=1, cols=max_len or 1)
+            header_cells = [f"列{idx + 1}" for idx in range(max_len or 1)]
+            _style_docx_table(table, header_cells)
+            for idx, header in enumerate(header_cells):
+                table.rows[0].cells[idx].text = header
             for row in parsed:
                 row_cells = table.add_row().cells
                 padded = list(row) + [""] * (max_len - len(row))
@@ -790,6 +798,7 @@ def _write_docx_table(document: Document, source: DataSource) -> None:
 
     if isinstance(parsed, dict):
         table = document.add_table(rows=1, cols=2)
+        _style_docx_table(table, ["key", "value"])
         table.rows[0].cells[0].text = "key"
         table.rows[0].cells[1].text = "value"
         for key, value in parsed.items():
@@ -810,6 +819,41 @@ def _build_docx(data_sources: list[DataSource]) -> bytes:
     output = io.BytesIO()
     document.save(output)
     return output.getvalue()
+
+
+def _style_docx_table(table, headers: list[str]) -> None:
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.append(tblPr)
+
+    tblW = OxmlElement("w:tblW")
+    tblW.set(qn("w:w"), "5000")
+    tblW.set(qn("w:type"), "pct")
+    tblPr.append(tblW)
+
+    tblBorders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        element = OxmlElement(f"w:{edge}")
+        element.set(qn("w:val"), "single")
+        element.set(qn("w:sz"), "8")
+        element.set(qn("w:color"), "BFBFBF")
+        tblBorders.append(element)
+    tblPr.append(tblBorders)
+
+    if not table.rows:
+        return
+    header_cells = table.rows[0].cells
+    for idx, cell in enumerate(header_cells):
+        cell.text = headers[idx] if idx < len(headers) else ""
+        shading = OxmlElement("w:shd")
+        shading.set(qn("w:fill"), "D9D9D9")
+        cell._tc.get_or_add_tcPr().append(shading)
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.font.bold = True
+                run.font.size = Pt(10)
 
 
 def _prepare_form_data() -> dict[str, Any]:
