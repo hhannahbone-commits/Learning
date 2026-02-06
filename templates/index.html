@@ -246,6 +246,26 @@
         font-size: 0.9rem;
       }
 
+      .preview-tabs {
+        display: flex;
+        gap: 0.6rem;
+        margin-bottom: 0.8rem;
+      }
+
+      .preview-tabs button {
+        border: 1px solid var(--border-color);
+        background: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      .preview-tabs button.active {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+      }
+
       .chart-preview {
         margin-top: 1.2rem;
         background: white;
@@ -438,6 +458,10 @@
 
         <section class="note" id="preview-section">
           <h2>数据预览</h2>
+          <div class="preview-tabs">
+            <button type="button" data-preview="table" class="active">表格预览</button>
+            <button type="button" data-preview="chart">图表预览</button>
+          </div>
           <div id="preview-container">暂无可预览数据。</div>
           <div class="chart-preview" id="chart-preview">
             <div class="chart-controls">
@@ -761,6 +785,34 @@
 
       document.getElementById("chart-type")?.addEventListener("change", () => {
         renderChartPreview();
+      });
+
+      const initialTableView = document.getElementById("preview-container");
+      const initialChartView = document.getElementById("chart-preview");
+      if (initialTableView && initialChartView) {
+        initialChartView.style.display = "none";
+      }
+
+      document.querySelectorAll(".preview-tabs button").forEach((button) => {
+        button.addEventListener("click", () => {
+          document
+            .querySelectorAll(".preview-tabs button")
+            .forEach((btn) => btn.classList.remove("active"));
+          button.classList.add("active");
+          const mode = button.dataset.preview;
+          const tableView = document.getElementById("preview-container");
+          const chartView = document.getElementById("chart-preview");
+          if (!tableView || !chartView) {
+            return;
+          }
+          if (mode === "chart") {
+            tableView.style.display = "none";
+            chartView.style.display = "block";
+          } else {
+            tableView.style.display = "block";
+            chartView.style.display = "none";
+          }
+        });
       });
     </script>
   </body>

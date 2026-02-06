@@ -44,6 +44,40 @@ MAX_TEXT_LENGTH = 4000
 SCRIPT_SCAN_LIMIT = 30000
 MAX_DATA_SOURCES = 60
 
+
+def _flatten_json_rows(payload: object) -> list[list[str]]:
+    if isinstance(payload, list):
+        if payload and all(isinstance(item, dict) for item in payload):
+            headers: list[str] = []
+            for item in payload:
+                for key in item.keys():
+                    if key not in headers:
+                        headers.append(key)
+            rows = [headers]
+            for item in payload:
+                rows.append([json.dumps(item.get(key, ""), ensure_ascii=False) for key in headers])
+            return rows
+        if payload and all(isinstance(item, list) for item in payload):
+            max_len = max((len(row) for row in payload), default=0)
+            headers = [f"列{idx + 1}" for idx in range(max_len)]
+            rows = [headers]
+            for row in payload:
+                padded = list(row) + [""] * (max_len - len(row))
+                rows.append([json.dumps(value, ensure_ascii=False) for value in padded])
+            return rows
+        if payload:
+            headers = ["value"]
+            rows = [headers]
+            for item in payload:
+                rows.append([json.dumps(item, ensure_ascii=False)])
+            return rows
+    if isinstance(payload, dict):
+        rows = [["key", "value"]]
+        for key, value in payload.items():
+            rows.append([str(key), json.dumps(value, ensure_ascii=False)])
+        return rows
+    return []
+
 AUTO_INSTALL = os.getenv("AUTO_INSTALL_DEPS", "1") == "1"
 REQUIRED_MODULES = ("flask", "requests", "bs4", "openpyxl", "playwright", "docx")
 
@@ -87,10 +121,11 @@ CHART_KEYWORDS = (
     "option",
     "options",
     "config",
+    "tabledata",
 )
 
 DATA_PATTERN = re.compile(
-    r"(?P<key>series|dataset|datasets|xAxis|yAxis|values|labels|data|option|options|config)\s*:\s*(?P<value>[\[{])",
+    r"(?P<key>series|dataset|datasets|xAxis|yAxis|values|labels|data|option|options|config|tableData)\s*:\s*(?P<value>[\[{])",
     re.IGNORECASE,
 )
 
@@ -266,6 +301,23 @@ def _extract_from_scripts(
                         source="script",
                     )
                 )
+                if key.lower() == "tabledata" and formatted:
+                    try:
+                        parsed = json.loads(formatted)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if parsed is not None:
+                        rows = _flatten_json_rows(parsed)
+                        if rows:
+                            table_formatted = json.dumps(rows, ensure_ascii=False, indent=2)
+                            data_sources.append(
+                                DataSource(
+                                    label="tableData 表格",
+                                    value=table_formatted[:MAX_TEXT_LENGTH],
+                                    formatted=table_formatted,
+                                    source="script",
+                                )
+                            )
                 if len(data_sources) >= MAX_DATA_SOURCES:
                     break
 
@@ -632,10 +684,20 @@ def _write_sheet_data(sheet, source: DataSource) -> None:
                 padded = list(row) + [""] * (max_len - len(row))
                 sheet.append(padded)
             return
+        flattened = _flatten_json_rows(parsed)
+        if flattened:
+            for row in flattened:
+                sheet.append(row)
+            return
         sheet.append(["data", json.dumps(parsed, ensure_ascii=False)])
         return
 
     if isinstance(parsed, dict):
+        flattened = _flatten_json_rows(parsed)
+        if flattened:
+            for row in flattened:
+                sheet.append(row)
+            return
         sheet.append(["key", "value"])
         for key, value in parsed.items():
             sheet.append([key, json.dumps(value, ensure_ascii=False)])
