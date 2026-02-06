@@ -289,6 +289,10 @@
               required
             />
             <div class="url-status" id="url-status">请输入有效网址</div>
+            <div class="meta">建议：直接输入网址后点击“开始爬取”。需要登录再展开高级设置。</div>
+            <div class="actions" style="margin-top: 0.6rem;">
+              <button class="btn-secondary" type="button" id="fill-example">填入示例网址</button>
+            </div>
           </div>
 
           <details>
@@ -431,6 +435,7 @@
       const urlInput = document.getElementById("url");
       const statusEl = document.getElementById("url-status");
       const filterInput = document.getElementById("filter");
+      const fillExample = document.getElementById("fill-example");
 
       function updateStatus() {
         const value = urlInput.value.trim();
@@ -451,6 +456,12 @@
 
       urlInput.addEventListener("input", updateStatus);
       updateStatus();
+
+      fillExample?.addEventListener("click", () => {
+        urlInput.value = "https://echarts.apache.org/examples/zh/editor.html?c=line-simple";
+        updateStatus();
+        urlInput.focus();
+      });
 
       document.querySelectorAll(".copy-button").forEach((button) => {
         button.addEventListener("click", () => {

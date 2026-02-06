@@ -451,11 +451,14 @@ def _write_sheet_data(sheet, source: DataSource) -> None:
                         headers.append(key)
             sheet.append(headers)
             for item in parsed:
-                sheet.append([item.get(key, "") for key in headers])
+                row = [item.get(key, "") for key in headers]
+                sheet.append(row)
             return
         if parsed and all(isinstance(item, list) for item in parsed):
+            max_len = max((len(row) for row in parsed), default=0)
             for row in parsed:
-                sheet.append(row)
+                padded = list(row) + [""] * (max_len - len(row))
+                sheet.append(padded)
             return
         sheet.append(["data", json.dumps(parsed, ensure_ascii=False)])
         return
