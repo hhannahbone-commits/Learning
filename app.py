@@ -296,15 +296,15 @@ def _extract_tables(soup: BeautifulSoup) -> list[DataSource]:
             continue
         header_cells = rows[0].find_all(["th", "td"])
         headers = [cell.get_text(strip=True) or f"列{idx+1}" for idx, cell in enumerate(header_cells)]
-        data_rows = []
+        table_matrix: list[list[str]] = [headers]
         for row in rows[1:]:
             cells = [cell.get_text(strip=True) for cell in row.find_all(["td", "th"])]
             if not any(cells):
                 continue
-            row_data = {headers[i]: cells[i] if i < len(cells) else "" for i in range(len(headers))}
-            data_rows.append(row_data)
-        if data_rows:
-            formatted = json.dumps(data_rows, ensure_ascii=False, indent=2)
+            padded = cells + [""] * (len(headers) - len(cells))
+            table_matrix.append(padded[: len(headers)])
+        if len(table_matrix) > 1:
+            formatted = json.dumps(table_matrix, ensure_ascii=False, indent=2)
             results.append(
                 DataSource(
                     label=f"表格数据 #{index}",
