@@ -400,11 +400,163 @@ def _scrape_dynamic_content(
             ]
             context.add_cookies(cookie_list)
         page = context.new_page()
+        api_sources: list[DataSource] = []
+
+        def handle_response(response) -> None:
+            try:
+                content_type = response.headers.get("content-type", "")
+                if "application/json" not in content_type:
+                    return
+                url_lower = response.url.lower()
+                if not any(keyword in url_lower for keyword in ("chart", "data", "stat", "graph", "series")):
+                    return
+                payload = response.json()
+                formatted = json.dumps(payload, ensure_ascii=False, indent=2)
+                api_sources.append(
+                    DataSource(
+                        label=f"API 响应数据: {response.url}",
+                        value=formatted[:MAX_TEXT_LENGTH],
+                        formatted=formatted,
+                        source=f"api_response:{response.url}",
+                    )
+                )
+            except Exception:
+                return
+
+        page.on("response", handle_response)
         page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+        wait_selectors = [
+            "#main",
+            ".echarts-container",
+            "[_echarts_instance_]",
+            ".highcharts-container",
+            "canvas",
+            "svg",
+            ".plotly",
+            ".chart",
+        ]
+        for selector in wait_selectors:
+            try:
+                page.wait_for_selector(selector, timeout=5000)
+                logger.info("Found chart container: %s", selector)
+                break
+            except Exception:
+                continue
+        page.wait_for_timeout(2000)
+
+        chart_configs = page.evaluate(
+            """
+            () => {
+              const results = [];
+              if (typeof echarts !== "undefined") {
+                document.querySelectorAll("*").forEach((el) => {
+                  try {
+                    const instance = echarts.getInstanceByDom(el);
+                    if (instance) {
+                      results.push({
+                        type: "echarts_instance",
+                        label: "ECharts 图表实例",
+                        data: instance.getOption()
+                      });
+                    }
+                  } catch (e) {}
+                });
+              }
+              if (typeof Highcharts !== "undefined" && Highcharts.charts) {
+                Highcharts.charts.forEach((chart, index) => {
+                  if (chart) {
+                    results.push({
+                      type: "highcharts_instance",
+                      label: `Highcharts 图表 #${index + 1}`,
+                      data: chart.options
+                    });
+                  }
+                });
+              }
+              if (typeof Chart !== "undefined" && Chart.instances) {
+                Object.values(Chart.instances).forEach((chart, index) => {
+                  if (chart && chart.config) {
+                    results.push({
+                      type: "chartjs_instance",
+                      label: `Chart.js 图表 #${index + 1}`,
+                      data: {
+                        type: chart.config.type,
+                        data: chart.config.data,
+                        options: chart.config.options
+                      }
+                    });
+                  }
+                });
+              }
+              if (typeof Plotly !== "undefined") {
+                document.querySelectorAll(".plotly").forEach((div, index) => {
+                  if (div.data && div.layout) {
+                    results.push({
+                      type: "plotly_instance",
+                      label: `Plotly 图表 #${index + 1}`,
+                      data: { data: div.data, layout: div.layout }
+                    });
+                  }
+                });
+              }
+              const varNames = [
+                "option","chartOption","myOption","options","config","chartConfig",
+                "data","chartData","series","dataset","datasets"
+              ];
+              varNames.forEach((varName) => {
+                try {
+                  if (window[varName] && typeof window[varName] === "object") {
+                    results.push({
+                      type: "global_variable",
+                      label: `全局变量: ${varName}`,
+                      data: window[varName]
+                    });
+                  }
+                } catch (e) {}
+              });
+              const d3Elements = document.querySelectorAll("[__data__]");
+              if (d3Elements.length > 0) {
+                const d3Data = [];
+                d3Elements.forEach((el) => {
+                  if (el.__data__) {
+                    d3Data.push(el.__data__);
+                  }
+                });
+                if (d3Data.length) {
+                  results.push({
+                    type: "d3_data",
+                    label: "D3.js 绑定数据",
+                    data: d3Data
+                  });
+                }
+              }
+              return results;
+            }
+            """
+        )
+
         html = page.content()
         browser.close()
 
-    return extract_chart_data(html, custom_regex)
+    data_sources, raw_snippets = extract_chart_data(html, custom_regex)
+    existing_values = {source.value for source in data_sources}
+    for config in chart_configs or []:
+        try:
+            formatted = json.dumps(config["data"], ensure_ascii=False, indent=2)
+        except (TypeError, json.JSONDecodeError, KeyError):
+            continue
+        if formatted in existing_values:
+            continue
+        data_sources.append(
+            DataSource(
+                label=config.get("label", "图表实例"),
+                value=formatted[:MAX_TEXT_LENGTH],
+                formatted=formatted,
+                source=f"javascript_{config.get('type', 'runtime')}",
+            )
+        )
+    data_sources.extend(api_sources)
+    return data_sources, raw_snippets
 
 
 def _serialize_data_sources(data_sources: list[DataSource]) -> str:
@@ -567,6 +719,7 @@ def _prepare_form_data() -> dict[str, Any]:
         "raw_snippets": [],
         "data_sources_json": "",
         "error": "",
+        "suggestions": [],
         "searched": False,
         "csrf_token": csrf_token,
     }
@@ -618,6 +771,12 @@ def index():
             data["data_sources"] = data_sources
             data["raw_snippets"] = raw_snippets
             data["data_sources_json"] = _serialize_data_sources(data_sources)
+            if not data_sources:
+                data["suggestions"] = [
+                    "未找到图表数据，建议启用“动态爬取”后重试。",
+                    "如果页面需要登录，请在高级设置中补充 Cookie 或 Headers。",
+                    "若数据来自接口，可在浏览器 Network 中定位真实数据源。",
+                ]
             logger.info("Scrape success: %s, data_sources=%s", target_url, len(data_sources))
         except ValueError as exc:
             data["error"] = str(exc)

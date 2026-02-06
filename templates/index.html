@@ -365,6 +365,7 @@
                 <input
                   type="checkbox"
                   name="use_dynamic"
+                  id="use_dynamic"
                   value="1"
                   {% if use_dynamic %}checked{% endif %}
                 />
@@ -381,6 +382,16 @@
 
         {% if error %}
         <div class="error">{{ error }}</div>
+        {% endif %}
+        {% if suggestions %}
+        <div class="note">
+          <strong>诊断建议：</strong>
+          <ul>
+            {% for item in suggestions %}
+            <li>{{ item }}</li>
+            {% endfor %}
+          </ul>
+        </div>
         {% endif %}
 
         <div class="toolbar">
@@ -493,7 +504,26 @@
         }
       }
 
+      function analyzeUrl() {
+        const value = urlInput.value.trim().toLowerCase();
+        const dynamicHints = [
+          "echarts.apache.org/examples",
+          "highcharts.com/demo",
+          "plotly",
+          "react",
+          "vue",
+          "angular",
+          "/#/",
+        ];
+        const shouldEnable = dynamicHints.some((hint) => value.includes(hint));
+        const dynamicCheckbox = document.getElementById("use_dynamic");
+        if (shouldEnable && dynamicCheckbox) {
+          dynamicCheckbox.checked = true;
+        }
+      }
+
       urlInput.addEventListener("input", updateStatus);
+      urlInput.addEventListener("change", analyzeUrl);
       updateStatus();
 
       fillExample?.addEventListener("click", () => {
