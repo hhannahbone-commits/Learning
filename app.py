@@ -46,6 +46,10 @@ MAX_DATA_SOURCES = 60
 
 
 def _flatten_json_rows(payload: object) -> list[list[str]]:
+    if isinstance(payload, dict):
+        for key in ("tableData", "tabledata", "rows", "list", "data"):
+            if key in payload and isinstance(payload[key], list):
+                return _flatten_json_rows(payload[key])
     if isinstance(payload, list):
         if payload and all(isinstance(item, dict) for item in payload):
             headers: list[str] = []
