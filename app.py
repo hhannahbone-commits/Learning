@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from openpyxl import Workbook
+from openpyxl.chart import BarChart, LineChart, PieChart, Reference
 from docx import Document
 import requests
 from flask import Flask, Response, render_template, request, session
@@ -687,10 +688,73 @@ def _build_excel(data_sources: list[DataSource]) -> bytes:
         title = _normalize_sheet_title(source.label, f"data_{idx}")
         sheet = workbook.create_sheet(title=title)
         _write_sheet_data(sheet, source)
+        _add_chart_to_sheet(sheet, source)
 
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue()
+
+
+def _detect_chart_type(source: DataSource, parsed: object) -> str:
+    raw_text = (source.formatted or source.value).lower()
+    if "type" in raw_text:
+        if any(keyword in raw_text for keyword in ("pie", "piechart")):
+            return "pie"
+        if any(keyword in raw_text for keyword in ("bar", "column")):
+            return "bar"
+        if "line" in raw_text:
+            return "line"
+
+    if isinstance(parsed, list) and parsed:
+        if all(isinstance(item, dict) for item in parsed):
+            has_time = any(
+                any("time" in key.lower() or "date" in key.lower() for key in item.keys())
+                for item in parsed
+            )
+            if has_time:
+                return "line"
+            return "pie" if len(parsed) < 10 else "line"
+        if all(isinstance(item, list) for item in parsed):
+            return "pie" if len(parsed) < 10 else "line"
+        return "pie" if len(parsed) < 10 else "line"
+    if isinstance(parsed, dict):
+        return "pie" if len(parsed) < 10 else "line"
+    return "line"
+
+
+def _add_chart_to_sheet(sheet, source: DataSource) -> None:
+    raw = source.formatted or source.value
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return
+
+    data_start_row = 4
+    max_row = sheet.max_row
+    max_col = sheet.max_column
+    if max_row < data_start_row + 1 or max_col < 1:
+        return
+
+    chart_type = _detect_chart_type(source, parsed)
+    if chart_type == "pie":
+        chart = PieChart()
+    elif chart_type == "bar":
+        chart = BarChart()
+    else:
+        chart = LineChart()
+
+    if max_col >= 2:
+        data_ref = Reference(sheet, min_col=2, min_row=data_start_row, max_row=max_row, max_col=max_col)
+        categories = Reference(sheet, min_col=1, min_row=data_start_row + 1, max_row=max_row)
+        chart.add_data(data_ref, titles_from_data=True)
+        chart.set_categories(categories)
+    else:
+        data_ref = Reference(sheet, min_col=1, min_row=data_start_row, max_row=max_row)
+        chart.add_data(data_ref, titles_from_data=True)
+
+    chart.height = 9
+    chart.width = 16
+    sheet.add_chart(chart, "F4")
 
 
 def _write_docx_table(document: Document, source: DataSource) -> None:
