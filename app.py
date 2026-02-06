@@ -371,10 +371,22 @@ def _extract_tables(soup: BeautifulSoup) -> list[DataSource]:
         if not header_rows:
             continue
 
-        header_cells = header_rows[0].find_all(["th", "td"])
-        headers = [cell.get_text(strip=True) or f"列{idx+1}" for idx, cell in enumerate(header_cells)]
-        if not headers:
+        def _expand_row(row) -> list[str]:
+            cells = []
+            for cell in row.find_all(["th", "td"]):
+                text = cell.get_text(strip=True)
+                colspan = int(cell.get("colspan", 1))
+                cells.extend([text] + [""] * (colspan - 1))
+            return cells
+
+        header_matrix = [_expand_row(row) for row in header_rows]
+        max_cols = max((len(row) for row in header_matrix), default=0)
+        if max_cols == 0:
             continue
+        headers: list[str] = []
+        for col_idx in range(max_cols):
+            parts = [row[col_idx] for row in header_matrix if col_idx < len(row) and row[col_idx]]
+            headers.append(" / ".join(parts) if parts else f"列{col_idx + 1}")
 
         table_matrix: list[list[str]] = [headers]
         for row in body_rows:
