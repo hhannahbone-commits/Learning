@@ -500,14 +500,31 @@ def _scrape_dynamic_content(
                 }
               } catch (e) {}
               if (typeof echarts !== "undefined") {
+                const instances = [];
                 document.querySelectorAll("*").forEach((el) => {
                   try {
                     const instance = echarts.getInstanceByDom(el);
                     if (instance) {
+                      instances.push(instance);
+                    }
+                  } catch (e) {}
+                });
+                instances.forEach((instance, index) => {
+                  try {
+                    const option = instance.getOption ? instance.getOption() : null;
+                    if (option) {
                       results.push({
-                        type: "echarts_instance",
-                        label: "ECharts 图表实例",
-                        data: instance.getOption()
+                        type: "echarts_option",
+                        label: `ECharts 配置 #${index + 1}`,
+                        data: option
+                      });
+                      const xAxis = option.xAxis ? option.xAxis[0]?.data || option.xAxis.data : null;
+                      const series = option.series || [];
+                      const seriesData = series.map((item) => item?.data).filter(Boolean);
+                      results.push({
+                        type: "echarts_data",
+                        label: `ECharts 数据 #${index + 1}`,
+                        data: { xAxis, series: seriesData }
                       });
                     }
                   } catch (e) {}
