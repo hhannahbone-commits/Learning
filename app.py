@@ -292,31 +292,55 @@ def _extract_from_scripts(
 
 def _extract_tables(soup: BeautifulSoup) -> list[DataSource]:
     tables = soup.find_all("table")
-    results: list[DataSource] = []
-    for index, table in enumerate(tables, start=1):
-        rows = table.find_all("tr")
-        if not rows:
+    if not tables:
+        return []
+
+    best_table: list[list[str]] = []
+    best_row_count = 0
+
+    for table in tables:
+        thead = table.find("thead")
+        tbody = table.find("tbody")
+        header_rows = thead.find_all("tr") if thead else []
+        body_rows = tbody.find_all("tr") if tbody else []
+
+        if not header_rows:
+            header_rows = table.find_all("tr")[:1]
+        if not body_rows:
+            body_rows = table.find_all("tr")[1:]
+
+        if not header_rows:
             continue
-        header_cells = rows[0].find_all(["th", "td"])
+
+        header_cells = header_rows[0].find_all(["th", "td"])
         headers = [cell.get_text(strip=True) or f"列{idx+1}" for idx, cell in enumerate(header_cells)]
+        if not headers:
+            continue
+
         table_matrix: list[list[str]] = [headers]
-        for row in rows[1:]:
+        for row in body_rows:
             cells = [cell.get_text(strip=True) for cell in row.find_all(["td", "th"])]
             if not any(cells):
                 continue
             padded = cells + [""] * (len(headers) - len(cells))
             table_matrix.append(padded[: len(headers)])
-        if len(table_matrix) > 1:
-            formatted = json.dumps(table_matrix, ensure_ascii=False, indent=2)
-            results.append(
-                DataSource(
-                    label=f"表格数据 #{index}",
-                    value=formatted[:MAX_TEXT_LENGTH],
-                    formatted=formatted,
-                    source="table",
-                )
+
+        row_count = len(table_matrix) - 1
+        if row_count > best_row_count:
+            best_row_count = row_count
+            best_table = table_matrix
+
+    if best_table:
+        formatted = json.dumps(best_table, ensure_ascii=False, indent=2)
+        return [
+            DataSource(
+                label="主表格数据",
+                value=formatted[:MAX_TEXT_LENGTH],
+                formatted=formatted,
+                source="table",
             )
-    return results
+        ]
+    return []
 
 
 def _extract_svg_data(soup: BeautifulSoup) -> list[DataSource]:
